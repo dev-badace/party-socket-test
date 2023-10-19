@@ -26,8 +26,17 @@ const socket = new PartySocket({
 socket.start();
 
 // Similar to .addEventListener("message")
-sock.eventHub.messages.subscribe((message) => {
+socket.eventHub.messages.subscribe((message) => {
   // console.log(message.data);
+});
+
+//Updates when status changes
+sock.eventHub.status.subscribe((status) => {
+  //logs engine status. use this if you need a more detailed one
+  console.log(status);
+
+  //logs 'connected' | 'closed' | 'initial' | 'failed' | 'connecting' | 'reconnecting'
+  console.log(socket.getStatus());
 });
 
 // Closes the socket
