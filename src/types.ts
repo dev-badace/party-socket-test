@@ -78,7 +78,7 @@ export interface ConnOptions {
    * @type {boolean}
    * @required
    */
-  waitForRoom: boolean;
+  waitForRoom?: boolean;
 
   /**
    * The host address for the connection.
