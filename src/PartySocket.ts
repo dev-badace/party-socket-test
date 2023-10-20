@@ -615,6 +615,8 @@ export class PartySocket {
     }
 
     this.counter++;
+    this.stateBlock = "initial"; //todo maybe add closed :/
+    this.eventHub.status.notify(this.stateBlock);
   }
 
   public start() {
@@ -643,8 +645,6 @@ export class PartySocket {
       this._log(LogLevel.INFO, this.counter, `[STOPPED]`);
       this.status = "not_started";
       this.closeSocket();
-      this.stateBlock = "initial"; //todo maybe add closed :/
-      this.eventHub.status.notify(this.stateBlock);
 
       window.removeEventListener("offline", this.tryHeartbeat);
       window.removeEventListener("focus", this.tryHeartbeat);
@@ -666,11 +666,7 @@ export class PartySocket {
     }
 
     this.closeSocket();
-    this.stateBlock = "initial";
-    this.eventHub.status.notify(this.stateBlock);
-
     this._log(LogLevel.INFO, this.counter, `[Reconnect]`);
-
     this.authentication();
   }
 
@@ -681,10 +677,7 @@ export class PartySocket {
     }
 
     this._log(LogLevel.INFO, this.counter, `[Close]`);
-
     this.closeSocket();
-    this.stateBlock = "initial";
-    this.eventHub.status.notify(this.stateBlock);
   }
 
   public getStatus = () => {
