@@ -682,6 +682,17 @@ export class PartySocket {
     }
   };
 
+  // we're not buffering if offline, leaving that to the user,  maybe later we can do it
+  public send(data: string) {
+    if (this.socket === null) {
+      console.warn("[SEND] socket not connected yet", data);
+    } else if (this.socket.readyState !== 1 /* WebSocket.OPEN */) {
+      console.warn("[SEND] socket no longer open", data);
+    } else {
+      this.socket.send(data);
+    }
+  }
+
   //todo do we want userland addEventListners. or just let them subscribe to message eventSource :/ not sure
   private addEventListener(e: "close" | "error" | "message") {}
 }
