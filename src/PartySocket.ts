@@ -126,7 +126,6 @@ export class PartySocket {
     // we try reconnect, on our side, if it's anything other than connected we don't do anything
     if (this.stateBlock === "connected") {
       this.closeSocket();
-      this.counter++;
       this.authentication();
     }
   };
@@ -144,7 +143,6 @@ export class PartySocket {
     // we try reconnect, on our side, if it's anything other than connected we don't do anything
     if (this.stateBlock === "connected") {
       this.closeSocket();
-      this.counter++;
       this.authentication();
     }
   };
@@ -203,6 +201,13 @@ export class PartySocket {
     }
 
     return url;
+  }
+
+  //blocl
+  private failed() {
+    this.stateBlock = "failed";
+    this.eventHub.status.notify(this.stateBlock);
+    this.counter++;
   }
 
   //block
@@ -279,9 +284,7 @@ export class PartySocket {
 
       //we consider it fail
 
-      this.stateBlock = "failed";
-      this.eventHub.status.notify(this.stateBlock);
-      this.counter++;
+      this.failed();
       return;
     }
 
@@ -295,9 +298,7 @@ export class PartySocket {
         error
       );
 
-      this.stateBlock = "failed";
-      this.eventHub.status.notify(this.stateBlock);
-      this.counter++;
+      this.failed();
       return;
     }
 
@@ -481,9 +482,7 @@ export class PartySocket {
 
     if (error instanceof StopRetry) {
       this._log(LogLevel.ERROR, counter, `[Stop Retry] Connection Failed`);
-      this.stateBlock = "failed";
-      this.eventHub.status.notify(this.stateBlock);
-      this.counter++;
+      this.failed();
       return;
     }
 
@@ -493,9 +492,7 @@ export class PartySocket {
         counter,
         `[Max Conn Tries] moving to -> Connection Failed`
       );
-      this.stateBlock = "failed";
-      this.eventHub.status.notify(this.stateBlock);
-      this.counter++;
+      this.failed();
       return;
     }
 
@@ -616,6 +613,8 @@ export class PartySocket {
       this.socket.close();
       this.socket = null;
     }
+
+    this.counter++;
   }
 
   public start() {
@@ -643,7 +642,6 @@ export class PartySocket {
     if (this.status === "started") {
       this._log(LogLevel.INFO, this.counter, `[STOPPED]`);
       this.status = "not_started";
-      this.counter++;
       this.closeSocket();
       this.stateBlock = "initial"; //todo maybe add closed :/
       this.eventHub.status.notify(this.stateBlock);
@@ -667,15 +665,12 @@ export class PartySocket {
       return;
     }
 
-    this._log(LogLevel.INFO, this.counter, `[Reconnect]`);
-
-    if (this.stateBlock === "connected") {
-      this.closeSocket();
-    }
-
-    this.counter++;
+    this.closeSocket();
     this.stateBlock = "initial";
     this.eventHub.status.notify(this.stateBlock);
+
+    this._log(LogLevel.INFO, this.counter, `[Reconnect]`);
+
     this.authentication();
   }
 
@@ -687,11 +682,7 @@ export class PartySocket {
 
     this._log(LogLevel.INFO, this.counter, `[Close]`);
 
-    if (this.stateBlock === "connected") {
-      this.closeSocket();
-    }
-
-    this.counter++;
+    this.closeSocket();
     this.stateBlock = "initial";
     this.eventHub.status.notify(this.stateBlock);
   }
