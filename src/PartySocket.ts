@@ -100,13 +100,13 @@ export class PartySocket {
   }
 
   //todo maybe add the counter to the logs, will make it easier to detect versions
-  private _log(logLevel: LogLevel, ...args: unknown[]) {
+  private _log(logLevel: LogLevel, counter: number, ...args: unknown[]) {
     if (typeof this.options.logLevel === "number") {
       if (logLevel < this.options.logLevel) return;
 
       // not using spread because compiled version uses Symbols
       // tslint:disable-next-line
-      console.log.apply(console, ["PWS>", ...args]);
+      console.log.apply(console, [`PWS ${counter} >`, ...args]);
     }
   }
 
@@ -114,7 +114,7 @@ export class PartySocket {
   //cuz sockets are almost always closed first before trying an reconn
   //saying this in context of them emitting for an old socket, and affecting the new one
   private onSocketError = (event: Event) => {
-    this._log(LogLevel.WARN, `[Socket internal error]`, event);
+    this._log(LogLevel.WARN, this.counter, `[Socket internal error]`, event);
 
     if (this.socket?.readyState === 1) return;
 
@@ -132,7 +132,7 @@ export class PartySocket {
   };
 
   private onSocketClose = (event: CloseEvent) => {
-    this._log(LogLevel.WARN, `[Socket internal close]`, event);
+    this._log(LogLevel.WARN, this.counter, `[Socket internal close]`, event);
 
     //our signal to stop retry
     if (event.code === 4000) {
@@ -150,14 +150,18 @@ export class PartySocket {
   };
 
   private onSocketMessage = (event: MessageEvent<any>) => {
-    this._log(LogLevel.INFO, `[Socket Message]`);
-    this._log(LogLevel.DEBUG, `[Message Data]`, event);
+    this._log(LogLevel.INFO, this.counter, `[Socket Message]`);
+    this._log(LogLevel.DEBUG, this.counter, `[Message Data]`, event);
     this.eventHub.messages.notify(event);
   };
 
   private tryHeartbeat = () => {
     if (this.stateBlock === "connected") {
-      this._log(LogLevel.INFO, `[Manual Heartbeat] offline or focus`);
+      this._log(
+        LogLevel.INFO,
+        this.counter,
+        `[Manual Heartbeat] offline or focus`
+      );
 
       //this will lead to 2 pings temporarily
       //the counter is being guarded by the status, so maybe after some proper fuzz testing we may be able to find bugs,
@@ -206,7 +210,7 @@ export class PartySocket {
     this.stateBlock = "auth";
     this.eventHub.status.notify(this.stateBlock);
     const localCounter = this.counter;
-    this._log(LogLevel.INFO, `[Authenticating...]`);
+    this._log(LogLevel.INFO, localCounter, `[Authenticating...]`);
 
     if (typeof this.options.auth === "function") {
       try {
@@ -218,29 +222,43 @@ export class PartySocket {
         if (this.counter !== localCounter) {
           this._log(
             LogLevel.DEBUG,
+            localCounter,
             `[auth ok] but timers don't match, marked as stale`
           );
           return;
         }
 
-        this._log(LogLevel.INFO, `[auth ok] moving to -> connection block`);
+        this._log(
+          LogLevel.INFO,
+          localCounter,
+          `[auth ok] moving to -> connection block`
+        );
 
         this.connection(localCounter, params);
       } catch (error) {
         if (this.counter !== localCounter) {
           this._log(
             LogLevel.DEBUG,
+            localCounter,
             `[auth failed] but timers don't match, marked as stale`
           );
           return;
         }
 
-        this._log(LogLevel.INFO, `[auth failed]  moving to -> error block`);
+        this._log(
+          LogLevel.INFO,
+          localCounter,
+          `[auth failed]  moving to -> error block`
+        );
 
         this.authError(localCounter, error);
       }
     } else {
-      this._log(LogLevel.INFO, `[no auth] moving to -> connection block`);
+      this._log(
+        LogLevel.INFO,
+        localCounter,
+        `[no auth] moving to -> connection block`
+      );
 
       this.connection(localCounter, {});
     }
@@ -252,7 +270,12 @@ export class PartySocket {
     this.eventHub.status.notify(this.stateBlock);
 
     if (error instanceof StopRetry) {
-      this._log(LogLevel.ERROR, `[Auth Fail] Server said stop retry`, error);
+      this._log(
+        LogLevel.ERROR,
+        counter,
+        `[Auth Fail] Server said stop retry`,
+        error
+      );
 
       //we consider it fail
 
@@ -267,6 +290,7 @@ export class PartySocket {
     if (this.authRetry >= this.options.config!.maxAuthTries!) {
       this._log(
         LogLevel.ERROR,
+        counter,
         `[Max Auth Tries] moving to -> Authentication Failed`,
         error
       );
@@ -279,17 +303,18 @@ export class PartySocket {
 
     setTimeout(() => {
       if (counter !== this.counter) {
-        this._log(LogLevel.DEBUG, `[stale] [Switch -> Auth Block]`);
+        this._log(LogLevel.DEBUG, counter, `[stale] [Switch -> Auth Block]`);
         return;
       }
 
-      this._log(LogLevel.INFO, `[Switch -> Auth Block]`);
+      this._log(LogLevel.INFO, counter, `[Switch -> Auth Block]`);
 
       this.authentication();
     }, this.options.config!.authBackoff![this.authRetry] || 5000);
 
     this._log(
       LogLevel.INFO,
+      counter,
       `[Schedule Reauth ${
         this.options.config!.authBackoff![this.authRetry] || 5000
       }ms]`
@@ -316,7 +341,7 @@ export class PartySocket {
       );
 
       if (counter !== this.counter) {
-        this._log(LogLevel.DEBUG, `[stale] [Connection ok]`);
+        this._log(LogLevel.DEBUG, counter, `[stale] [Connection ok]`);
 
         conn.close();
         //@ts-ignore
@@ -328,17 +353,22 @@ export class PartySocket {
 
       this.socket = conn;
 
-      this._log(LogLevel.INFO, `[Connection ok] moving to -> connected block`);
+      this._log(
+        LogLevel.INFO,
+        counter,
+        `[Connection ok] moving to -> connected block`
+      );
       this.connected(counter, conn);
     } catch (error) {
       if (counter !== this.counter) {
-        this._log(LogLevel.DEBUG, `[stale] [Connection fail]`);
+        this._log(LogLevel.DEBUG, counter, `[stale] [Connection fail]`);
 
         return;
       }
 
       this._log(
         LogLevel.INFO,
+        counter,
         `[Connection fail] moving to -> connection error block`
       );
 
@@ -450,7 +480,7 @@ export class PartySocket {
     this.eventHub.status.notify(this.stateBlock);
 
     if (error instanceof StopRetry) {
-      this._log(LogLevel.ERROR, `[Stop Retry] Connection Failed`);
+      this._log(LogLevel.ERROR, counter, `[Stop Retry] Connection Failed`);
       this.stateBlock = "failed";
       this.eventHub.status.notify(this.stateBlock);
       this.counter++;
@@ -460,6 +490,7 @@ export class PartySocket {
     if (this.connRetry >= this.options.config!.maxConnTries!) {
       this._log(
         LogLevel.ERROR,
+        counter,
         `[Max Conn Tries] moving to -> Connection Failed`
       );
       this.stateBlock = "failed";
@@ -470,17 +501,18 @@ export class PartySocket {
 
     setTimeout(() => {
       if (counter !== this.counter) {
-        this._log(LogLevel.DEBUG, `[stale] [Switch -> Auth Block]`);
+        this._log(LogLevel.DEBUG, counter, `[stale] [Switch -> Auth Block]`);
         return;
       }
 
-      this._log(LogLevel.INFO, `[Switch -> Auth Block]`);
+      this._log(LogLevel.INFO, counter, `[Switch -> Auth Block]`);
 
       this.authentication();
     }, this.options.config!.connectionBackoff![this.connRetry] || 5000);
 
     this._log(
       LogLevel.INFO,
+      counter,
       `[Schedule Reconnect ${
         this.options.config!.connectionBackoff![this.connRetry] || 5000
       }ms]`
@@ -508,7 +540,7 @@ export class PartySocket {
       //* and assume that the conn will get taken care of
 
       if (counter !== this.counter) {
-        this._log(LogLevel.DEBUG, `[stale] [CONNECTED PING]`);
+        this._log(LogLevel.DEBUG, counter, `[stale] [CONNECTED PING]`);
         return;
       }
       this.ping(counter, conn);
@@ -523,20 +555,21 @@ export class PartySocket {
   //ping with stale socket & incorrect counter
   //ok maybe we make sure to ping onlt when the state is connected?
   private async ping(counter: number, conn: WebSocket, singleUse?: boolean) {
-    this._log(LogLevel.INFO, `[CONNECTED PING]`);
+    this._log(LogLevel.INFO, counter, `[CONNECTED PING]`);
 
     conn.send("PING");
 
     const timeout = setTimeout(() => {
       unsub();
       if (counter !== this.counter) {
-        this._log(LogLevel.DEBUG, `[stale] [PONG TIMEOUT]`);
+        this._log(LogLevel.DEBUG, counter, `[stale] [PONG TIMEOUT]`);
 
         return;
       }
 
       this._log(
         LogLevel.INFO,
+        counter,
         `[PONG TIMEOUT] moving to -> authentication block`
       );
 
@@ -550,6 +583,7 @@ export class PartySocket {
       if (e.data === "PONG") {
         this._log(
           counter === this.counter ? LogLevel.INFO : LogLevel.DEBUG,
+          counter,
           counter === this.counter
             ? `[CONNECTED PONG]`
             : `[stale] [Connected Pong]`
@@ -576,7 +610,7 @@ export class PartySocket {
   //this closes the socket, always called before reauth
   private closeSocket() {
     if (this.socket) {
-      this._log(LogLevel.INFO, `[Con closed]`);
+      this._log(LogLevel.INFO, this.counter, `[Con closed]`);
 
       this.removeSocketEventListeners(this.socket);
       this.socket.close();
@@ -584,7 +618,7 @@ export class PartySocket {
     }
   }
 
-  start() {
+  public start() {
     if (this.status === "started") {
       console.warn(`Conn has already started`);
       return;
@@ -592,7 +626,7 @@ export class PartySocket {
 
     //todo maybe reset all states here, or at in the stop
 
-    this._log(LogLevel.INFO, `[STARTED]`);
+    this._log(LogLevel.INFO, this.counter, `[STARTED]`);
 
     this.status = "started";
     this.authentication();
@@ -605,9 +639,9 @@ export class PartySocket {
 
   //only stop if you want to stop the conn
   //reconn won't happen after this
-  stop() {
+  public stop() {
     if (this.status === "started") {
-      this._log(LogLevel.INFO, `[STOPPED]`);
+      this._log(LogLevel.INFO, this.counter, `[STOPPED]`);
       this.status = "not_started";
       this.counter++;
       this.closeSocket();
@@ -627,13 +661,13 @@ export class PartySocket {
   }
 
   //userland events should increase the counter
-  reconnect() {
+  public reconnect() {
     if (this.status !== "started") {
       console.warn(`Cannot reconnect machine is not started`);
       return;
     }
 
-    this._log(LogLevel.INFO, `[Reconnect]`);
+    this._log(LogLevel.INFO, this.counter, `[Reconnect]`);
 
     if (this.stateBlock === "connected") {
       this.closeSocket();
@@ -645,13 +679,13 @@ export class PartySocket {
     this.authentication();
   }
 
-  close() {
+  public close() {
     if (this.status !== "started") {
       console.warn(`Cannot close machine is not started`);
       return;
     }
 
-    this._log(LogLevel.INFO, `[Close]`);
+    this._log(LogLevel.INFO, this.counter, `[Close]`);
 
     if (this.stateBlock === "connected") {
       this.closeSocket();
@@ -662,7 +696,7 @@ export class PartySocket {
     this.eventHub.status.notify(this.stateBlock);
   }
 
-  getStatus = () => {
+  public getStatus = () => {
     switch (this.stateBlock) {
       case "auth":
       case "authError":
